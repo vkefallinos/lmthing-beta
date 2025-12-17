@@ -24,7 +24,8 @@ npm install
 ```typescript
 import { Base } from './Base';
 
-const instance = new Base(({ defState }) => {
+const instance = new Base();
+instance.setFn(({ defState }) => {
   const [count, setCount] = defState(0);
 
   console.log('Count:', count);
@@ -46,7 +47,8 @@ const instance = new Base(({ defState }) => {
 ### Effects with Dependencies
 
 ```typescript
-const instance = new Base(({ defState, defEffect }) => {
+const instance = new Base();
+instance.setFn(({ defState, defEffect }) => {
   const [count, setCount] = defState(0);
 
   defEffect(() => {
@@ -64,7 +66,8 @@ const instance = new Base(({ defState, defEffect }) => {
 ### Mutable References
 
 ```typescript
-const instance = new Base(({ defState, defRef }) => {
+const instance = new Base();
+instance.setFn(({ defState, defRef }) => {
   const [count, setCount] = defState(0);
   const renderCount = defRef(0);
 
@@ -88,7 +91,8 @@ const instance = new Base(({ defState, defRef }) => {
 ```typescript
 type Action = { type: 'increment' } | { type: 'decrement' };
 
-const instance = new Base(({ defReducer }) => {
+const instance = new Base();
+instance.setFn(({ defReducer }) => {
   const [count, dispatch] = defReducer(
     (state, action: Action) => {
       switch (action.type) {
@@ -114,7 +118,8 @@ const instance = new Base(({ defReducer }) => {
 ### Complex Example
 
 ```typescript
-const instance = new Base(({ defState, defEffect, defRef }) => {
+const instance = new Base();
+instance.setFn(({ defState, defEffect, defRef }) => {
   const [count, setCount] = defState(0);
   const [name, setName] = defState('John');
   const renderCount = defRef(0);
@@ -137,16 +142,28 @@ const instance = new Base(({ defState, defEffect, defRef }) => {
 
 ## How It Works
 
-1. **Initialization**: When you create a new `Base` instance, it immediately runs the provided function
-2. **Hook Tracking**: Each call to `defState`, `defEffect`, etc. is tracked by index (like React)
-3. **Stabilization Loop**:
+1. **Initialization**: Create a `Base` instance, then call `setFn()` with your function
+2. **Execution**: The function runs immediately when you call `setFn()`
+3. **Hook Tracking**: Each call to `defState`, `defEffect`, etc. is tracked by index (like React)
+4. **Stabilization Loop**:
    - The function runs and may trigger state updates
    - If state changes occur, the function re-runs
    - This continues until no more state changes happen (stabilization)
-4. **Effect Execution**: After stabilization, all effects are run
-5. **Cleanup**: Effect cleanup functions run before the effect re-runs or when `cleanup()` is called
+5. **Effect Execution**: After stabilization, all effects are run
+6. **Cleanup**: Effect cleanup functions run before the effect re-runs or when `cleanup()` is called
 
 ## API
+
+### `new Base()`
+
+Creates a new Base instance. The instance does not execute any code until you call `setFn()`.
+
+### `setFn(renderFn: (api) => void): void`
+
+Sets the render function and immediately executes it. The function receives an API object with the hook methods.
+
+**Parameters:**
+- **renderFn**: A function that receives an object with `defState`, `defEffect`, `defRef`, and `defReducer` methods
 
 ### `defState<T>(initialValue: T): [T, (action: SetStateAction<T>) => void]`
 

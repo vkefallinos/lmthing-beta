@@ -5,7 +5,8 @@ describe('Base class', () => {
     it('should initialize state with the provided value', () => {
       let stateValue: number | undefined;
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count] = defState(0);
         stateValue = count;
       });
@@ -16,7 +17,8 @@ describe('Base class', () => {
     it('should update state and re-run until stable', () => {
       const runLog: number[] = [];
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count, setCount] = defState(0);
         runLog.push(count);
 
@@ -33,7 +35,8 @@ describe('Base class', () => {
       let finalCount: number | undefined;
       let finalName: string | undefined;
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count, setCount] = defState(0);
         const [name, setName] = defState('initial');
 
@@ -55,7 +58,8 @@ describe('Base class', () => {
     it('should support functional updates', () => {
       let finalValue: number | undefined;
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count, setCount] = defState(5);
         finalValue = count;
 
@@ -70,7 +74,8 @@ describe('Base class', () => {
     it('should not re-run if state is set to the same value', () => {
       const runLog: number[] = [];
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count, setCount] = defState(0);
         runLog.push(count);
 
@@ -86,7 +91,8 @@ describe('Base class', () => {
     it('should run effect after state stabilizes', () => {
       const effectLog: string[] = [];
 
-      new Base(({ defState, defEffect }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
 
         defEffect(() => {
@@ -106,7 +112,8 @@ describe('Base class', () => {
       const effectLog: number[] = [];
       let triggerUpdate: (() => void) | undefined;
 
-      const instance = new Base(({ defState, defEffect }) => {
+      const instance = new Base();
+      instance.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         triggerUpdate = () => setCount(count + 1);
 
@@ -129,7 +136,8 @@ describe('Base class', () => {
       const effectLog: number[] = [];
       let triggerUpdate: (() => void) | undefined;
 
-      new Base(({ defState, defEffect }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         const [other, setOther] = defState(0);
         triggerUpdate = () => setOther(other + 1);
@@ -150,7 +158,8 @@ describe('Base class', () => {
       const log: string[] = [];
       let triggerUpdate: (() => void) | undefined;
 
-      new Base(({ defState, defEffect }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         triggerUpdate = () => setCount(count + 1);
 
@@ -174,7 +183,8 @@ describe('Base class', () => {
     it('should run cleanup on instance cleanup', () => {
       const log: string[] = [];
 
-      const instance = new Base(({ defEffect }) => {
+      const instance = new Base();
+      instance.setFn(({ defEffect }) => {
         defEffect(() => {
           log.push('setup');
           return () => {
@@ -193,7 +203,8 @@ describe('Base class', () => {
       const effectLog: number[] = [];
       let triggerUpdate: (() => void) | undefined;
 
-      new Base(({ defState, defEffect }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         triggerUpdate = () => setCount(count + 1);
 
@@ -213,7 +224,8 @@ describe('Base class', () => {
     it('should create a mutable ref with initial value', () => {
       let ref: { current: number } | undefined;
 
-      new Base(({ defRef }) => {
+      const base = new Base();
+      base.setFn(({ defRef }) => {
         ref = defRef(42);
       });
 
@@ -223,7 +235,8 @@ describe('Base class', () => {
     it('should maintain ref value across re-runs', () => {
       const log: number[] = [];
 
-      new Base(({ defState, defRef }) => {
+      const base = new Base();
+      base.setFn(({ defState, defRef }) => {
         const [count, setCount] = defState(0);
         const ref = defRef(0);
 
@@ -243,7 +256,8 @@ describe('Base class', () => {
       const runLog: number[] = [];
       let refValue: { current: number } | undefined;
 
-      new Base(({ defState, defRef }) => {
+      const base = new Base();
+      base.setFn(({ defState, defRef }) => {
         const [count] = defState(0);
         const ref = defRef(0);
         refValue = ref;
@@ -263,7 +277,8 @@ describe('Base class', () => {
     it('should initialize reducer with initial state', () => {
       let state: number | undefined;
 
-      new Base(({ defReducer }) => {
+      const base = new Base();
+      base.setFn(({ defReducer }) => {
         const [count] = defReducer((state, action: number) => state + action, 0);
         state = count;
       });
@@ -274,7 +289,8 @@ describe('Base class', () => {
     it('should update state using reducer and re-run', () => {
       const runLog: number[] = [];
 
-      new Base(({ defReducer }) => {
+      const base = new Base();
+      base.setFn(({ defReducer }) => {
         const [count, dispatch] = defReducer(
           (state, action: { type: 'increment' | 'decrement' }) => {
             switch (action.type) {
@@ -304,7 +320,8 @@ describe('Base class', () => {
     it('should not re-run if reducer returns same state', () => {
       const runLog: number[] = [];
 
-      new Base(({ defReducer }) => {
+      const base = new Base();
+      base.setFn(({ defReducer }) => {
         const [count, dispatch] = defReducer((state, action: number) => state, 0);
 
         runLog.push(count);
@@ -320,7 +337,8 @@ describe('Base class', () => {
       const effectLog: string[] = [];
       let finalRefValue: number | undefined;
 
-      new Base(({ defState, defEffect, defRef }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect, defRef }) => {
         const [count, setCount] = defState(0);
         const renderCount = defRef(0);
 
@@ -346,7 +364,8 @@ describe('Base class', () => {
       let finalCount: number | undefined;
       let externalTrigger: (() => void) | undefined;
 
-      const instance = new Base(({ defState, defEffect }) => {
+      const instance = new Base();
+      instance.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         const [triggered, setTriggered] = defState(false);
 
@@ -371,7 +390,8 @@ describe('Base class', () => {
 
     it('should prevent infinite loops by limiting iterations', () => {
       expect(() => {
-        new Base(({ defState }) => {
+        const base = new Base();
+        base.setFn(({ defState }) => {
           const [count, setCount] = defState(0);
           // Always increment, creating infinite loop
           setCount(count + 1);
@@ -382,7 +402,8 @@ describe('Base class', () => {
     it('should maintain hook order consistency', () => {
       const log: Array<[number, string]> = [];
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [count, setCount] = defState(0);
         const [name, setName] = defState('test');
 
@@ -404,7 +425,8 @@ describe('Base class', () => {
   describe('edge cases', () => {
     it('should handle empty render function', () => {
       expect(() => {
-        new Base(() => {
+        const base = new Base();
+        base.setFn(() => {
           // Do nothing
         });
       }).not.toThrow();
@@ -415,7 +437,8 @@ describe('Base class', () => {
       const effect2Log: number[] = [];
       let triggerUpdate: (() => void) | undefined;
 
-      new Base(({ defState, defEffect }) => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
         const [count, setCount] = defState(0);
         const [other, setOther] = defState(10);
 
@@ -442,7 +465,8 @@ describe('Base class', () => {
     it('should handle state updates during stabilization', () => {
       const log: number[] = [];
 
-      new Base(({ defState }) => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
         const [a, setA] = defState(0);
         const [b, setB] = defState(0);
 

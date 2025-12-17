@@ -35,17 +35,32 @@ export class Base {
   private isRunning = false;
   private pendingUpdates: Array<() => void> = [];
   private maxIterations = 1000; // Prevent infinite loops
-
-  constructor(private renderFn: (api: {
+  private renderFn?: (api: {
     defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
     defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
     defRef: <T>(initialValue: T) => { current: T };
     defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
-  }) => void) {
+  }) => void;
+
+  constructor() {
+    // Constructor is now empty - use setFn to set the render function
+  }
+
+  public setFn(renderFn: (api: {
+    defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
+    defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
+    defRef: <T>(initialValue: T) => { current: T };
+    defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
+  }) => void): void {
+    this.renderFn = renderFn;
     this.run();
   }
 
   private run(): void {
+    if (!this.renderFn) {
+      return; // No function set yet, nothing to run
+    }
+
     let iterations = 0;
     let hasChanges = true;
 
