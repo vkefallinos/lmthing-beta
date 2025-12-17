@@ -193,6 +193,15 @@ npm test
 npm run build
 ```
 
+## Development
+
+For developers working on this project, see [CLAUDE.md](./CLAUDE.md) for:
+- Architecture decisions and rationale
+- Design patterns used
+- Development workflow
+- How to update documentation
+- Project history and context
+
 ## License
 
 ISC
