@@ -29,12 +29,28 @@ interface EffectHook {
 
 type Hook = StateHook<any> | ReducerHook<any, any> | RefHook<any> | EffectHook;
 
+interface HookSnapshot {
+  type: 'state' | 'reducer' | 'ref' | 'effect';
+  index: number;
+  value?: any; // For state and reducer hooks
+  current?: any; // For ref hooks
+  deps?: ReadonlyArray<any>; // For effect hooks
+  hasRun?: boolean; // For effect hooks
+}
+
+export interface FunctionSnapshot {
+  iteration: number;
+  timestamp: number;
+  hooks: HookSnapshot[];
+}
+
 export class Base {
   private hooks: Hook[] = [];
   private currentHookIndex = 0;
   private isRunning = false;
   private pendingUpdates: Array<() => void> = [];
   private maxIterations = 1000; // Prevent infinite loops
+  private snapshots: FunctionSnapshot[] = [];
   private renderFn?: (api: {
     defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
     defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
@@ -80,6 +96,9 @@ export class Base {
       });
 
       this.isRunning = false;
+
+      // Capture snapshot after this iteration
+      this.captureSnapshot(iterations);
 
       // Process any pending updates
       if (this.pendingUpdates.length > 0) {
@@ -246,5 +265,95 @@ export class Base {
         hook.cleanup();
       }
     });
+  }
+
+  // Capture a snapshot of the current hook state
+  private captureSnapshot(iteration: number): void {
+    const snapshot: FunctionSnapshot = {
+      iteration,
+      timestamp: Date.now(),
+      hooks: this.hooks.map((hook, index) => this.serializeHook(hook, index)),
+    };
+    this.snapshots.push(snapshot);
+  }
+
+  // Serialize a hook for snapshot storage (deep copy values)
+  private serializeHook(hook: Hook, index: number): HookSnapshot {
+    const base = { type: hook.type, index };
+
+    switch (hook.type) {
+      case 'state':
+        return {
+          ...base,
+          type: 'state',
+          value: this.deepCopy(hook.value),
+        };
+      case 'reducer':
+        return {
+          ...base,
+          type: 'reducer',
+          value: this.deepCopy(hook.value),
+        };
+      case 'ref':
+        return {
+          ...base,
+          type: 'ref',
+          current: this.deepCopy(hook.current),
+        };
+      case 'effect':
+        return {
+          ...base,
+          type: 'effect',
+          deps: hook.deps ? [...hook.deps] : undefined,
+          hasRun: hook.hasRun,
+        };
+    }
+  }
+
+  // Deep copy utility for hook values
+  private deepCopy<T>(value: T): T {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (typeof value !== 'object') {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => this.deepCopy(item)) as any;
+    }
+    if (value instanceof Date) {
+      return new Date(value.getTime()) as any;
+    }
+    if (value instanceof Map) {
+      return new Map(Array.from(value.entries()).map(([k, v]) => [k, this.deepCopy(v)])) as any;
+    }
+    if (value instanceof Set) {
+      return new Set(Array.from(value).map(item => this.deepCopy(item))) as any;
+    }
+    // Plain object
+    const copy: any = {};
+    for (const key in value) {
+      if (value.hasOwnProperty(key)) {
+        copy[key] = this.deepCopy(value[key]);
+      }
+    }
+    return copy;
+  }
+
+  // Get all snapshots
+  public getSnapshots(): readonly FunctionSnapshot[] {
+    return [...this.snapshots];
+  }
+
+  // Get the last snapshot
+  public getLastSnapshot(): FunctionSnapshot | undefined {
+    return this.snapshots.length > 0
+      ? this.snapshots[this.snapshots.length - 1]
+      : undefined;
+  }
+
+  // Clear all snapshots
+  public clearSnapshots(): void {
+    this.snapshots = [];
   }
 }
