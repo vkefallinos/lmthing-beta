@@ -1201,4 +1201,379 @@ describe('Base class', () => {
       });
     });
   });
+
+  describe('extend method', () => {
+    it('should allow extending with custom def methods', () => {
+      const base = new Base();
+      let outputValue: any;
+
+      base.extend({
+        defVariable: {
+          execute: ({ defOutputObject }, name, value) => {
+            return defOutputObject('variables', name, value);
+          },
+        },
+      });
+
+      base.onOutput((output) => {
+        outputValue = output;
+      });
+
+      base.setFn(({ defVariable }: any) => {
+        defVariable('x', 10);
+        defVariable('y', 20);
+      });
+
+      expect(outputValue).toEqual({
+        variables: { x: 10, y: 20 },
+      });
+    });
+
+    it('should call init function once on first usage', () => {
+      const initLog: string[] = [];
+      const base = new Base();
+
+      base.extend({
+        defCounter: {
+          init: (base) => {
+            initLog.push('init-called');
+          },
+          execute: ({ defState }, label) => {
+            const [count, setCount] = defState(0);
+            if (count < 2) {
+              setCount(count + 1);
+            }
+            return { label, count };
+          },
+        },
+      });
+
+      base.setFn(({ defCounter }: any) => {
+        defCounter('counter1');
+      });
+
+      // Init should be called exactly once
+      expect(initLog).toEqual(['init-called']);
+    });
+
+    it('should not call init if not provided', () => {
+      const base = new Base();
+      let result: any;
+
+      base.extend({
+        defSimple: {
+          execute: (api, value) => {
+            return value * 2;
+          },
+        },
+      });
+
+      base.setFn(({ defSimple }: any) => {
+        result = defSimple(5);
+      });
+
+      expect(result).toBe(10);
+    });
+
+    it('should provide access to all base API methods in execute', () => {
+      const base = new Base();
+      let finalState: any;
+
+      base.extend({
+        defComplex: {
+          execute: ({ defState, defRef, defEffect }, initialValue) => {
+            const [value, setValue] = defState(initialValue);
+            const ref = defRef(0);
+
+            ref.current += 1;
+
+            defEffect(() => {
+              // Effect can run
+            }, [value]);
+
+            return { value, refCount: ref.current, setValue };
+          },
+        },
+      });
+
+      base.setFn(({ defComplex }: any) => {
+        const result = defComplex(100);
+        finalState = result;
+      });
+
+      expect(finalState.value).toBe(100);
+      expect(finalState.refCount).toBeGreaterThan(0);
+    });
+
+    it('should allow multiple extensions', () => {
+      const base = new Base();
+      let output: any;
+
+      base.extend({
+        defVariable: {
+          execute: ({ defOutputObject }, name, value) => {
+            return defOutputObject('variables', name, value);
+          },
+        },
+        defConstant: {
+          execute: ({ defOutputObject }, name, value) => {
+            return defOutputObject('constants', name, value);
+          },
+        },
+      });
+
+      base.onOutput((out) => {
+        output = out;
+      });
+
+      base.setFn(({ defVariable, defConstant }: any) => {
+        defVariable('x', 10);
+        defConstant('PI', 3.14);
+      });
+
+      expect(output).toEqual({
+        variables: { x: 10 },
+        constants: { PI: 3.14 },
+      });
+    });
+
+    it('should support chaining extend calls', () => {
+      const base = new Base();
+      let output: any;
+
+      base.extend({
+        defVar1: {
+          execute: ({ defOutputObject }, value) => {
+            return defOutputObject('ns1', 'key1', value);
+          },
+        },
+      });
+
+      base.extend({
+        defVar2: {
+          execute: ({ defOutputObject }, value) => {
+            return defOutputObject('ns1', 'key2', value);
+          },
+        },
+      });
+
+      base.onOutput((out) => {
+        output = out;
+      });
+
+      base.setFn(({ defVar1, defVar2 }: any) => {
+        defVar1('value1');
+        defVar2('value2');
+      });
+
+      expect(output).toEqual({
+        ns1: { key1: 'value1', key2: 'value2' },
+      });
+    });
+
+    it('should work with state updates in extended methods', () => {
+      const base = new Base();
+      const runLog: number[] = [];
+
+      base.extend({
+        defIncrement: {
+          execute: ({ defState }) => {
+            const [count, setCount] = defState(0);
+            runLog.push(count);
+
+            if (count < 3) {
+              setCount(count + 1);
+            }
+
+            return count;
+          },
+        },
+      });
+
+      base.setFn(({ defIncrement }: any) => {
+        defIncrement();
+      });
+
+      expect(runLog).toEqual([0, 1, 2, 3]);
+    });
+
+    it('should allow extended methods to use other extended methods', () => {
+      const base = new Base();
+      let output: any;
+
+      base.extend({
+        defHelper: {
+          execute: ({ defOutputArray }, namespace, value) => {
+            defOutputArray(namespace, 'items', value);
+          },
+        },
+        defProcessor: {
+          execute: (api, items) => {
+            items.forEach((item: string) => {
+              (api as any).defHelper('processed', item.toUpperCase());
+            });
+          },
+        },
+      });
+
+      base.onOutput((out) => {
+        output = out;
+      });
+
+      base.setFn(({ defProcessor }: any) => {
+        defProcessor(['apple', 'banana']);
+      });
+
+      expect(output).toEqual({
+        processed: { items: ['APPLE', 'BANANA'] },
+      });
+    });
+
+    it('should initialize extension only once across multiple runs', () => {
+      const initLog: string[] = [];
+      const base = new Base();
+      let triggerUpdate: (() => void) | undefined;
+
+      base.extend({
+        defTracked: {
+          init: () => {
+            initLog.push('init');
+          },
+          execute: ({ defState }) => {
+            const [count, setCount] = defState(0);
+            triggerUpdate = () => setCount(count + 1);
+            return count;
+          },
+        },
+      });
+
+      base.setFn(({ defTracked }: any) => {
+        defTracked();
+      });
+
+      expect(initLog).toEqual(['init']);
+
+      // Trigger multiple updates
+      triggerUpdate!();
+      triggerUpdate!();
+
+      // Init should still only be called once
+      expect(initLog).toEqual(['init']);
+    });
+
+    it('should pass Base instance to init function', () => {
+      let capturedBase: any;
+      const base = new Base();
+
+      base.extend({
+        defCapture: {
+          init: (baseInstance) => {
+            capturedBase = baseInstance;
+          },
+          execute: () => {},
+        },
+      });
+
+      base.setFn(({ defCapture }: any) => {
+        defCapture();
+      });
+
+      expect(capturedBase).toBe(base);
+    });
+
+    it('should support complex real-world use case', () => {
+      const base = new Base();
+      let output: any;
+
+      // Create a defVariable extension that uses defOutputObject
+      base.extend({
+        defVariable: {
+          init: (base) => {
+            // Could initialize a variable registry here
+          },
+          execute: ({ defOutputObject }, name, value) => {
+            return defOutputObject('variables', name, value);
+          },
+        },
+      });
+
+      base.onOutput((out) => {
+        output = out;
+      });
+
+      base.setFn(({ defInput, defState, defVariable }: any) => {
+        const input: { x: number; y: number } = defInput();
+        const [multiplier, setMultiplier] = defState(1);
+
+        if (input) {
+          defVariable('x', input.x * multiplier);
+          defVariable('y', input.y * multiplier);
+          defVariable('sum', (input.x + input.y) * multiplier);
+
+          if (multiplier === 1) {
+            setMultiplier(2);
+          }
+        }
+      });
+
+      base.setInput({ x: 3, y: 4 });
+
+      expect(output).toEqual({
+        variables: {
+          x: 6,
+          y: 8,
+          sum: 14,
+        },
+      });
+    });
+
+    it('should return values from extended methods', () => {
+      const base = new Base();
+      let returnedValue: any;
+
+      base.extend({
+        defCalculate: {
+          execute: (api, a, b) => {
+            return a + b;
+          },
+        },
+      });
+
+      base.setFn(({ defCalculate }: any) => {
+        returnedValue = defCalculate(5, 10);
+      });
+
+      expect(returnedValue).toBe(15);
+    });
+
+    it('should work with effects in extended methods', () => {
+      const effectLog: string[] = [];
+      const base = new Base();
+      let triggerUpdate: (() => void) | undefined;
+
+      base.extend({
+        defWatcher: {
+          execute: ({ defState, defEffect }, label) => {
+            const [count, setCount] = defState(0);
+            triggerUpdate = () => setCount(count + 1);
+
+            defEffect(() => {
+              effectLog.push(`${label}:${count}`);
+            }, [count]);
+
+            return count;
+          },
+        },
+      });
+
+      base.setFn(({ defWatcher }: any) => {
+        defWatcher('counter');
+      });
+
+      expect(effectLog).toEqual(['counter:0']);
+
+      triggerUpdate!();
+      expect(effectLog).toEqual(['counter:0', 'counter:1']);
+    });
+  });
 });
