@@ -19,6 +19,8 @@ A TypeScript class that implements a hook-based state management system with the
 2. **Side Effects** (`defEffect`) - Like React's `useEffect`
 3. **Mutable References** (`defRef`) - Like React's `useRef`
 4. **Reducer Pattern** (`defReducer`) - Like React's `useReducer`
+5. **Input Processing** (`defInput`) - Access input data within the hook system
+6. **Structured Output** (`defOutputObject`, `defOutputArray`) - Generate organized output with namespace support
 
 ### Key Concept: Stabilization Loop
 
@@ -177,12 +179,15 @@ instance.setFn(({ defState, defEffect }) => {
 **Implementation**:
 ```typescript
 interface HookSnapshot {
-  type: 'state' | 'reducer' | 'ref' | 'effect';
+  type: 'state' | 'reducer' | 'ref' | 'effect' | 'input' | 'outputObject' | 'outputArray';
   index: number;
-  value?: any; // For state and reducer hooks
+  value?: any; // For state, reducer, input, outputObject, and outputArray hooks
   current?: any; // For ref hooks
   deps?: ReadonlyArray<any>; // For effect hooks
   hasRun?: boolean; // For effect hooks
+  namespace?: string; // For outputObject and outputArray hooks
+  key?: string; // For outputObject and outputArray hooks
+  enabled?: boolean; // For outputObject and outputArray hooks
 }
 
 export interface FunctionSnapshot {
@@ -234,6 +239,114 @@ const snapshots = base.getSnapshots();
 // snapshots[2].hooks[0].value === 2
 // snapshots[3].hooks[0].value === 3
 ```
+
+### 10. Input/Output System
+**Decision**: Implement a structured input/output system with `defInput`, `defOutputObject`, and `defOutputArray` hooks
+**Rationale**:
+- Provides a clean API for processing input data through the hook system
+- Enables structured output generation with namespace organization
+- Output hooks are cleared and regenerated on each input to ensure fresh state
+- Supports both object (key-value) and array (accumulation) output patterns
+- Enable/disable functionality allows conditional output inclusion
+- Output callback fires after stabilization with complete, organized results
+
+**Implementation**:
+```typescript
+// Input storage
+private inputValue: any = undefined;
+private outputCallback?: (output: Record<string, Record<string, any>>) => void;
+
+// Set input and trigger re-run
+public setInput(input: any): void {
+  this.inputValue = input;
+  this.clearOutputHooks(); // Clear previous outputs
+  if (this.renderFn) {
+    this.run();
+  }
+}
+
+// Set output callback
+public onOutput(callback: (output: Record<string, Record<string, any>>) => void): void {
+  this.outputCallback = callback;
+}
+
+// Access input in hooks
+private defInput<T>(): T {
+  const hookIndex = this.currentHookIndex++;
+  // Hook persists input value across runs
+  return this.inputValue;
+}
+
+// Create object output
+private defOutputObject(namespace: string, key: string, value: any) {
+  // Returns { key, value, enable(), disable(), enabled }
+  // Multiple calls with same namespace/key will overwrite
+}
+
+// Create array output
+private defOutputArray(namespace: string, key: string, value: any) {
+  // Returns { key, value, enable(), disable(), enabled }
+  // Multiple calls with same namespace/key will append to array
+}
+
+// Build final output after stabilization
+private buildOutput(): Record<string, Record<string, any>> {
+  // Groups by namespace, builds objects and arrays
+  // Excludes disabled outputs
+}
+```
+
+**API**:
+```typescript
+const base = new Base();
+
+// Set output callback
+base.onOutput((output) => {
+  console.log('Output:', output);
+});
+
+// Define processing logic
+base.setFn(({ defInput, defState, defOutputObject, defOutputArray }) => {
+  const input = defInput<string[]>();
+  const [processed, setProcessed] = defState(0);
+
+  if (input) {
+    input.forEach((item) => {
+      defOutputArray('results', 'items', item.toUpperCase());
+    });
+
+    if (processed === 0) {
+      setProcessed(input.length);
+    }
+  }
+
+  defOutputObject('results', 'count', processed);
+});
+
+// Process input
+base.setInput(['apple', 'banana', 'cherry']);
+// Output callback receives:
+// {
+//   results: {
+//     items: ['APPLE', 'BANANA', 'CHERRY'],
+//     count: 3
+//   }
+// }
+```
+
+**Use Cases**:
+- Data transformation pipelines
+- Input validation and processing
+- Structured report generation
+- Conditional output based on input patterns
+- Accumulating results across multiple operations
+
+**Key Design Choices**:
+1. **Output clearing on setInput**: Ensures outputs are always fresh for new input, preventing accumulation from previous runs
+2. **Namespace organization**: Groups related outputs together, prevents key collisions
+3. **Enable/disable pattern**: Allows conditional inclusion of outputs without restructuring code
+4. **Getter for `enabled`**: Returns reactive property that reflects current hook state
+5. **Callback after stabilization**: Ensures output represents final, stable state
 
 ---
 
@@ -460,6 +573,19 @@ When Claude makes architecture decisions:
 
 ## Version History
 
+### v1.3.0 - Input/Output System (2025-12-17)
+- Added input/output system with `defInput`, `defOutputObject`, and `defOutputArray` hooks
+- Implemented `setInput()` method to provide input data and trigger processing
+- Implemented `onOutput()` method to register callback for processed results
+- Output hooks cleared and regenerated on each `setInput()` call
+- Added enable/disable functionality for conditional output inclusion
+- Organized outputs by namespace with support for both object and array patterns
+- Output callback fires after state stabilization with complete results
+- Updated HookSnapshot interface to include input and output hook types
+- Added 19 comprehensive tests for input/output system (total: 55 tests)
+- Added Architecture Decision #10 documenting the input/output system
+- Enables data transformation pipelines and structured report generation
+
 ### v1.2.0 - Function Execution Snapshots (2025-12-17)
 - Added snapshot capture for each iteration of the stabilization loop
 - Implemented deep copy mechanism to prevent mutation of snapshot data
@@ -499,5 +625,5 @@ All development occurs on: `claude/add-function-snapshots-RTjDG`
 ---
 
 **Last Updated**: 2025-12-17
-**Last Updated By**: Claude (snapshot feature)
+**Last Updated By**: Claude (input/output system)
 **Next Review**: After next major feature addition

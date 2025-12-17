@@ -8,6 +8,9 @@ A TypeScript class that implements React-like hooks (`defState`, `defEffect`, `d
 - **defEffect**: Side effects with dependency tracking, similar to React's `useEffect`
 - **defRef**: Mutable references that persist across re-runs, similar to React's `useRef`
 - **defReducer**: Reducer-based state management, similar to React's `useReducer`
+- **defInput**: Access input data within the hook system for data processing
+- **defOutputObject** & **defOutputArray**: Generate structured output with namespace organization
+- **Input/Output Pipeline**: Process input data and receive organized results via callback
 - **Automatic stabilization**: The render function re-runs automatically until no more state changes occur
 - **Effect cleanup**: Proper cleanup of effects when dependencies change or instance is destroyed
 
@@ -115,6 +118,83 @@ instance.setFn(({ defReducer }) => {
 });
 ```
 
+### Input/Output Pipeline
+
+```typescript
+const instance = new Base();
+
+// Set up output callback
+instance.onOutput((output) => {
+  console.log('Processed output:', JSON.stringify(output, null, 2));
+});
+
+// Define processing logic
+instance.setFn(({ defInput, defState, defOutputObject, defOutputArray }) => {
+  const input = defInput<string[]>();
+  const [processedCount, setProcessedCount] = defState(0);
+
+  if (input && input.length > 0) {
+    // Process each item
+    input.forEach((item) => {
+      defOutputArray('results', 'processed', item.toUpperCase());
+    });
+
+    // Update count once
+    if (processedCount === 0) {
+      setProcessedCount(input.length);
+    }
+  }
+
+  // Add metadata to output
+  defOutputObject('results', 'count', processedCount);
+  defOutputObject('metadata', 'timestamp', Date.now());
+});
+
+// Process input data
+instance.setInput(['apple', 'banana', 'cherry']);
+
+// Output callback receives:
+// {
+//   "results": {
+//     "processed": ["APPLE", "BANANA", "CHERRY"],
+//     "count": 3
+//   },
+//   "metadata": {
+//     "timestamp": 1703012345678
+//   }
+// }
+```
+
+### Conditional Output with Enable/Disable
+
+```typescript
+const instance = new Base();
+
+instance.onOutput((output) => {
+  console.log('Output:', output);
+});
+
+instance.setFn(({ defInput, defOutputObject }) => {
+  const input = defInput<{ includeDebug: boolean; value: string }>();
+
+  if (input) {
+    defOutputObject('result', 'value', input.value);
+
+    // Conditionally include debug info
+    const debugOutput = defOutputObject('result', 'debug', 'Debug information');
+    if (!input.includeDebug) {
+      debugOutput.disable();
+    }
+  }
+});
+
+instance.setInput({ includeDebug: false, value: 'production' });
+// Output: { result: { value: 'production' } }
+
+instance.setInput({ includeDebug: true, value: 'development' });
+// Output: { result: { value: 'development', debug: 'Debug information' } }
+```
+
 ### Complex Example
 
 ```typescript
@@ -163,7 +243,7 @@ Creates a new Base instance. The instance does not execute any code until you ca
 Sets the render function and immediately executes it. The function receives an API object with the hook methods.
 
 **Parameters:**
-- **renderFn**: A function that receives an object with `defState`, `defEffect`, `defRef`, and `defReducer` methods
+- **renderFn**: A function that receives an object with `defState`, `defEffect`, `defRef`, `defReducer`, `defInput`, `defOutputObject`, and `defOutputArray` methods
 
 ### `defState<T>(initialValue: T): [T, (action: SetStateAction<T>) => void]`
 
@@ -193,6 +273,47 @@ Creates state managed by a reducer function.
 - **reducer**: Function that takes current state and action, returns new state
 - **initialState**: The initial state value
 - **Returns**: A tuple of [currentState, dispatch]
+
+### `setInput(input: any): void`
+
+Sets the input data, clears all output hooks, and re-runs the render function.
+
+- **input**: Any data you want to process
+
+### `onOutput(callback: (output) => void): void`
+
+Registers a callback to receive the processed output after state stabilizes.
+
+- **callback**: Function that receives the output object organized by namespaces
+
+### `defInput<T>(): T`
+
+Accesses the input data within your render function.
+
+- **Returns**: The input value set via `setInput()`
+
+### `defOutputObject(namespace: string, key: string, value: any): OutputControl`
+
+Creates an object output entry. Multiple calls with the same namespace/key will overwrite the previous value.
+
+- **namespace**: Groups related outputs together
+- **key**: The property name within the namespace
+- **value**: The value to output
+- **Returns**: An object with:
+  - `key`: The output key
+  - `value`: The output value
+  - `enabled`: Boolean indicating if this output is enabled
+  - `enable()`: Function to enable this output
+  - `disable()`: Function to disable this output
+
+### `defOutputArray(namespace: string, key: string, value: any): OutputControl`
+
+Creates an array output entry. Multiple calls with the same namespace/key will append to an array.
+
+- **namespace**: Groups related outputs together
+- **key**: The property name within the namespace (will be an array)
+- **value**: The value to append to the array
+- **Returns**: An object with the same properties as `defOutputObject`
 
 ### `cleanup(): void`
 

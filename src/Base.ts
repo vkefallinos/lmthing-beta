@@ -27,15 +27,39 @@ interface EffectHook {
   hasRun: boolean;
 }
 
-type Hook = StateHook<any> | ReducerHook<any, any> | RefHook<any> | EffectHook;
+interface InputHook<T> {
+  type: 'input';
+  value: T;
+}
+
+interface OutputObjectHook {
+  type: 'outputObject';
+  namespace: string;
+  key: string;
+  value: any;
+  enabled: boolean;
+}
+
+interface OutputArrayHook {
+  type: 'outputArray';
+  namespace: string;
+  key: string;
+  value: any;
+  enabled: boolean;
+}
+
+type Hook = StateHook<any> | ReducerHook<any, any> | RefHook<any> | EffectHook | InputHook<any> | OutputObjectHook | OutputArrayHook;
 
 interface HookSnapshot {
-  type: 'state' | 'reducer' | 'ref' | 'effect';
+  type: 'state' | 'reducer' | 'ref' | 'effect' | 'input' | 'outputObject' | 'outputArray';
   index: number;
-  value?: any; // For state and reducer hooks
+  value?: any; // For state, reducer, input, outputObject, and outputArray hooks
   current?: any; // For ref hooks
   deps?: ReadonlyArray<any>; // For effect hooks
   hasRun?: boolean; // For effect hooks
+  namespace?: string; // For outputObject and outputArray hooks
+  key?: string; // For outputObject and outputArray hooks
+  enabled?: boolean; // For outputObject and outputArray hooks
 }
 
 export interface FunctionSnapshot {
@@ -51,11 +75,28 @@ export class Base {
   private pendingUpdates: Array<() => void> = [];
   private maxIterations = 1000; // Prevent infinite loops
   private snapshots: FunctionSnapshot[] = [];
+  private inputValue: any = undefined;
+  private outputCallback?: (output: Record<string, Record<string, any>>) => void;
   private renderFn?: (api: {
     defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
     defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
     defRef: <T>(initialValue: T) => { current: T };
     defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
+    defInput: <T>() => T;
+    defOutputObject: (namespace: string, key: string, value: any) => {
+      key: string;
+      value: any;
+      enable: () => void;
+      disable: () => void;
+      enabled: boolean;
+    };
+    defOutputArray: (namespace: string, key: string, value: any) => {
+      key: string;
+      value: any;
+      enable: () => void;
+      disable: () => void;
+      enabled: boolean;
+    };
   }) => void;
 
   constructor() {
@@ -67,6 +108,21 @@ export class Base {
     defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
     defRef: <T>(initialValue: T) => { current: T };
     defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
+    defInput: <T>() => T;
+    defOutputObject: (namespace: string, key: string, value: any) => {
+      key: string;
+      value: any;
+      enable: () => void;
+      disable: () => void;
+      enabled: boolean;
+    };
+    defOutputArray: (namespace: string, key: string, value: any) => {
+      key: string;
+      value: any;
+      enable: () => void;
+      disable: () => void;
+      enabled: boolean;
+    };
   }) => void): void {
     this.renderFn = renderFn;
     this.run();
@@ -93,6 +149,9 @@ export class Base {
         defEffect: this.defEffect.bind(this),
         defRef: this.defRef.bind(this),
         defReducer: this.defReducer.bind(this),
+        defInput: this.defInput.bind(this),
+        defOutputObject: this.defOutputObject.bind(this),
+        defOutputArray: this.defOutputArray.bind(this),
       });
 
       this.isRunning = false;
@@ -116,6 +175,12 @@ export class Base {
 
     // Run effects after stabilization
     this.runEffects();
+
+    // Call output callback with built output
+    if (this.outputCallback) {
+      const output = this.buildOutput();
+      this.outputCallback(output);
+    }
   }
 
   private defState<T>(initialValue: T): [T, (action: SetStateAction<T>) => void] {
@@ -253,6 +318,126 @@ export class Base {
     });
   }
 
+  private defInput<T>(): T {
+    const hookIndex = this.currentHookIndex++;
+
+    // Initialize hook if it doesn't exist
+    if (hookIndex >= this.hooks.length) {
+      this.hooks.push({
+        type: 'input',
+        value: this.inputValue,
+      });
+    }
+
+    const hook = this.hooks[hookIndex] as InputHook<T>;
+    hook.value = this.inputValue;
+    return hook.value;
+  }
+
+  private defOutputObject(namespace: string, key: string, value: any): {
+    key: string;
+    value: any;
+    enable: () => void;
+    disable: () => void;
+    enabled: boolean;
+  } {
+    const hookIndex = this.currentHookIndex++;
+
+    // Initialize hook if it doesn't exist
+    if (hookIndex >= this.hooks.length) {
+      this.hooks.push({
+        type: 'outputObject',
+        namespace,
+        key,
+        value,
+        enabled: true,
+      });
+    }
+
+    const hook = this.hooks[hookIndex] as OutputObjectHook;
+
+    // Update values
+    hook.namespace = namespace;
+    hook.key = key;
+    hook.value = value;
+
+    return {
+      key: hook.key,
+      value: hook.value,
+      enable: () => { hook.enabled = true; },
+      disable: () => { hook.enabled = false; },
+      get enabled() { return hook.enabled; },
+    };
+  }
+
+  private defOutputArray(namespace: string, key: string, value: any): {
+    key: string;
+    value: any;
+    enable: () => void;
+    disable: () => void;
+    enabled: boolean;
+  } {
+    const hookIndex = this.currentHookIndex++;
+
+    // Initialize hook if it doesn't exist
+    if (hookIndex >= this.hooks.length) {
+      this.hooks.push({
+        type: 'outputArray',
+        namespace,
+        key,
+        value,
+        enabled: true,
+      });
+    }
+
+    const hook = this.hooks[hookIndex] as OutputArrayHook;
+
+    // Update values
+    hook.namespace = namespace;
+    hook.key = key;
+    hook.value = value;
+
+    return {
+      key: hook.key,
+      value: hook.value,
+      enable: () => { hook.enabled = true; },
+      disable: () => { hook.enabled = false; },
+      get enabled() { return hook.enabled; },
+    };
+  }
+
+  private buildOutput(): Record<string, Record<string, any>> {
+    const output: Record<string, Record<string, any>> = {};
+
+    this.hooks.forEach(hook => {
+      if (hook.type === 'outputObject' && hook.enabled) {
+        if (!output[hook.namespace]) {
+          output[hook.namespace] = {};
+        }
+        output[hook.namespace][hook.key] = hook.value;
+      } else if (hook.type === 'outputArray' && hook.enabled) {
+        if (!output[hook.namespace]) {
+          output[hook.namespace] = {};
+        }
+        if (!output[hook.namespace][hook.key]) {
+          output[hook.namespace][hook.key] = [];
+        }
+        if (Array.isArray(output[hook.namespace][hook.key])) {
+          output[hook.namespace][hook.key].push(hook.value);
+        }
+      }
+    });
+
+    return output;
+  }
+
+  private clearOutputHooks(): void {
+    // Remove all output hooks
+    this.hooks = this.hooks.filter(hook =>
+      hook.type !== 'outputObject' && hook.type !== 'outputArray'
+    );
+  }
+
   // Public method to trigger updates externally
   public update(): void {
     this.run();
@@ -265,6 +450,20 @@ export class Base {
         hook.cleanup();
       }
     });
+  }
+
+  // Set input and re-run the function
+  public setInput(input: any): void {
+    this.inputValue = input;
+    this.clearOutputHooks();
+    if (this.renderFn) {
+      this.run();
+    }
+  }
+
+  // Set the output callback
+  public onOutput(callback: (output: Record<string, Record<string, any>>) => void): void {
+    this.outputCallback = callback;
   }
 
   // Capture a snapshot of the current hook state
@@ -306,6 +505,30 @@ export class Base {
           type: 'effect',
           deps: hook.deps ? [...hook.deps] : undefined,
           hasRun: hook.hasRun,
+        };
+      case 'input':
+        return {
+          ...base,
+          type: 'input',
+          value: this.deepCopy(hook.value),
+        };
+      case 'outputObject':
+        return {
+          ...base,
+          type: 'outputObject',
+          namespace: hook.namespace,
+          key: hook.key,
+          value: this.deepCopy(hook.value),
+          enabled: hook.enabled,
+        };
+      case 'outputArray':
+        return {
+          ...base,
+          type: 'outputArray',
+          namespace: hook.namespace,
+          key: hook.key,
+          value: this.deepCopy(hook.value),
+          enabled: hook.enabled,
         };
     }
   }
