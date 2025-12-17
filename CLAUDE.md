@@ -165,6 +165,76 @@ instance.setFn(({ defState, defEffect }) => {
 });
 ```
 
+### 9. Function Execution Snapshots
+**Decision**: Capture a snapshot of all hook states after each iteration of the stabilization loop
+**Rationale**:
+- Enables debugging and introspection of state evolution
+- Allows time-travel debugging capabilities
+- Provides transparency into how state stabilizes over multiple iterations
+- Useful for understanding complex state update patterns
+- Deep copies prevent snapshots from being mutated by reference
+
+**Implementation**:
+```typescript
+interface HookSnapshot {
+  type: 'state' | 'reducer' | 'ref' | 'effect';
+  index: number;
+  value?: any; // For state and reducer hooks
+  current?: any; // For ref hooks
+  deps?: ReadonlyArray<any>; // For effect hooks
+  hasRun?: boolean; // For effect hooks
+}
+
+export interface FunctionSnapshot {
+  iteration: number;
+  timestamp: number;
+  hooks: HookSnapshot[];
+}
+
+private snapshots: FunctionSnapshot[] = [];
+
+private captureSnapshot(iteration: number): void {
+  const snapshot: FunctionSnapshot = {
+    iteration,
+    timestamp: Date.now(),
+    hooks: this.hooks.map((hook, index) => this.serializeHook(hook, index)),
+  };
+  this.snapshots.push(snapshot);
+}
+```
+
+**API**:
+```typescript
+// Get all snapshots
+const snapshots = instance.getSnapshots();
+
+// Get the last snapshot
+const lastSnapshot = instance.getLastSnapshot();
+
+// Clear all snapshots
+instance.clearSnapshots();
+```
+
+**Use Case**:
+Debugging complex state stabilization, analyzing hook value evolution, understanding why a particular state was reached.
+
+**Example**:
+```typescript
+const base = new Base();
+base.setFn(({ defState }) => {
+  const [count, setCount] = defState(0);
+  if (count < 3) {
+    setCount(count + 1);
+  }
+});
+
+const snapshots = base.getSnapshots();
+// snapshots[0].hooks[0].value === 0
+// snapshots[1].hooks[0].value === 1
+// snapshots[2].hooks[0].value === 2
+// snapshots[3].hooks[0].value === 3
+```
+
 ---
 
 ## File Structure
@@ -390,6 +460,15 @@ When Claude makes architecture decisions:
 
 ## Version History
 
+### v1.2.0 - Function Execution Snapshots (2025-12-17)
+- Added snapshot capture for each iteration of the stabilization loop
+- Implemented deep copy mechanism to prevent mutation of snapshot data
+- Added public API methods: `getSnapshots()`, `getLastSnapshot()`, `clearSnapshots()`
+- Exported `FunctionSnapshot` interface for type safety
+- Added 13 comprehensive snapshot tests (total: 36 tests)
+- Added Architecture Decision #9 documenting the snapshot feature
+- Enables debugging and time-travel inspection of hook state evolution
+
 ### v1.1.0 - setFn Method Refactoring (2025-12-17)
 - Refactored Base class to use `setFn()` method instead of constructor parameter
 - Separated instance creation from execution for more flexibility
@@ -408,7 +487,7 @@ When Claude makes architecture decisions:
 ## Contact & Contribution
 
 ### Development Branch
-All development occurs on: `claude/base-class-react-hooks-yZ3jb`
+All development occurs on: `claude/add-function-snapshots-RTjDG`
 
 ### Before Contributing
 1. Read this entire document
@@ -420,5 +499,5 @@ All development occurs on: `claude/base-class-react-hooks-yZ3jb`
 ---
 
 **Last Updated**: 2025-12-17
-**Last Updated By**: Claude (setFn refactoring)
+**Last Updated By**: Claude (snapshot feature)
 **Next Review**: After next major feature addition

@@ -484,4 +484,259 @@ describe('Base class', () => {
       expect(log[log.length - 1]).toBe(4);
     });
   });
+
+  describe('snapshots', () => {
+    it('should capture snapshots for each iteration', () => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [count, setCount] = defState(0);
+
+        if (count < 3) {
+          setCount(count + 1);
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Should have 4 snapshots (iterations 0, 1, 2, 3)
+      expect(snapshots.length).toBe(4);
+      expect(snapshots[0].iteration).toBe(0);
+      expect(snapshots[1].iteration).toBe(1);
+      expect(snapshots[2].iteration).toBe(2);
+      expect(snapshots[3].iteration).toBe(3);
+    });
+
+    it('should capture state hook values in snapshots', () => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [count, setCount] = defState(0);
+
+        if (count < 2) {
+          setCount(count + 1);
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Check state values in each snapshot
+      expect(snapshots[0].hooks[0].value).toBe(0);
+      expect(snapshots[1].hooks[0].value).toBe(1);
+      expect(snapshots[2].hooks[0].value).toBe(2);
+    });
+
+    it('should capture ref hook values in snapshots', () => {
+      const base = new Base();
+      base.setFn(({ defState, defRef }) => {
+        const [count, setCount] = defState(0);
+        const ref = defRef(0);
+
+        ref.current = count * 10;
+
+        if (count < 2) {
+          setCount(count + 1);
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Check ref values in each snapshot
+      expect(snapshots[0].hooks[1].current).toBe(0);
+      expect(snapshots[1].hooks[1].current).toBe(10);
+      expect(snapshots[2].hooks[1].current).toBe(20);
+    });
+
+    it('should capture reducer hook values in snapshots', () => {
+      const base = new Base();
+      base.setFn(({ defReducer }) => {
+        const [count, dispatch] = defReducer(
+          (state, action: 'increment') => state + 1,
+          0
+        );
+
+        if (count < 2) {
+          dispatch('increment');
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Check reducer values
+      expect(snapshots[0].hooks[0].value).toBe(0);
+      expect(snapshots[1].hooks[0].value).toBe(1);
+      expect(snapshots[2].hooks[0].value).toBe(2);
+    });
+
+    it('should capture effect hook metadata in snapshots', () => {
+      const base = new Base();
+      base.setFn(({ defState, defEffect }) => {
+        const [count, setCount] = defState(0);
+
+        defEffect(() => {
+          // Effect body
+        }, [count]);
+
+        if (count < 1) {
+          setCount(count + 1);
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Check effect metadata
+      const effectHook0 = snapshots[0].hooks.find(h => h.type === 'effect');
+      const effectHook1 = snapshots[1].hooks.find(h => h.type === 'effect');
+
+      expect(effectHook0?.deps).toEqual([0]);
+      expect(effectHook0?.hasRun).toBe(false);
+
+      expect(effectHook1?.deps).toEqual([1]);
+      expect(effectHook1?.hasRun).toBe(false);
+    });
+
+    it('should deep copy hook values to prevent mutation', () => {
+      let objState: { value: number } | undefined;
+
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [obj, setObj] = defState({ value: 0 });
+        objState = obj;
+
+        if (obj.value < 1) {
+          setObj({ value: obj.value + 1 });
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Mutate the current state
+      objState!.value = 999;
+
+      // Snapshots should not be affected
+      expect(snapshots[0].hooks[0].value).toEqual({ value: 0 });
+      expect(snapshots[1].hooks[0].value).toEqual({ value: 1 });
+    });
+
+    it('should provide getLastSnapshot() method', () => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [count, setCount] = defState(0);
+
+        if (count < 2) {
+          setCount(count + 1);
+        }
+      });
+
+      const lastSnapshot = base.getLastSnapshot();
+
+      expect(lastSnapshot).toBeDefined();
+      expect(lastSnapshot!.iteration).toBe(2);
+      expect(lastSnapshot!.hooks[0].value).toBe(2);
+    });
+
+    it('should return undefined from getLastSnapshot() when no snapshots exist', () => {
+      const base = new Base();
+
+      const lastSnapshot = base.getLastSnapshot();
+      expect(lastSnapshot).toBeUndefined();
+    });
+
+    it('should clear snapshots with clearSnapshots()', () => {
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [count, setCount] = defState(0);
+
+        if (count < 2) {
+          setCount(count + 1);
+        }
+      });
+
+      expect(base.getSnapshots().length).toBe(3);
+
+      base.clearSnapshots();
+
+      expect(base.getSnapshots().length).toBe(0);
+      expect(base.getLastSnapshot()).toBeUndefined();
+    });
+
+    it('should capture snapshots across multiple update() calls', () => {
+      let triggerUpdate: (() => void) | undefined;
+
+      const base = new Base();
+      base.setFn(({ defState }) => {
+        const [count, setCount] = defState(0);
+        triggerUpdate = () => setCount(count + 1);
+      });
+
+      // Initial run creates 1 snapshot
+      expect(base.getSnapshots().length).toBe(1);
+
+      // First update
+      triggerUpdate!();
+      expect(base.getSnapshots().length).toBe(2);
+
+      // Second update
+      triggerUpdate!();
+      expect(base.getSnapshots().length).toBe(3);
+
+      // Verify iteration numbers
+      const snapshots = base.getSnapshots();
+      expect(snapshots[0].iteration).toBe(0);
+      expect(snapshots[1].iteration).toBe(0); // New run starts at 0
+      expect(snapshots[2].iteration).toBe(0); // Each run starts at 0
+    });
+
+    it('should include timestamp in snapshots', () => {
+      const base = new Base();
+      const beforeTime = Date.now();
+
+      base.setFn(({ defState }) => {
+        const [count] = defState(0);
+      });
+
+      const afterTime = Date.now();
+      const snapshots = base.getSnapshots();
+
+      expect(snapshots[0].timestamp).toBeGreaterThanOrEqual(beforeTime);
+      expect(snapshots[0].timestamp).toBeLessThanOrEqual(afterTime);
+    });
+
+    it('should capture complex hook combinations in snapshots', () => {
+      const base = new Base();
+      base.setFn(({ defState, defRef, defReducer, defEffect }) => {
+        const [count, setCount] = defState(0);
+        const ref = defRef(0);
+        const [sum, dispatch] = defReducer(
+          (state, action: number) => state + action,
+          0
+        );
+
+        ref.current = count;
+
+        defEffect(() => {
+          // Effect
+        }, [count]);
+
+        if (count === 0) {
+          setCount(1);
+          dispatch(10);
+        }
+      });
+
+      const snapshots = base.getSnapshots();
+
+      // Verify last snapshot has all hooks
+      const lastSnapshot = snapshots[snapshots.length - 1];
+      expect(lastSnapshot.hooks.length).toBe(4);
+
+      const stateHook = lastSnapshot.hooks.find(h => h.type === 'state');
+      const refHook = lastSnapshot.hooks.find(h => h.type === 'ref');
+      const reducerHook = lastSnapshot.hooks.find(h => h.type === 'reducer');
+      const effectHook = lastSnapshot.hooks.find(h => h.type === 'effect');
+
+      expect(stateHook?.value).toBe(1);
+      expect(refHook?.current).toBe(1);
+      expect(reducerHook?.value).toBe(10);
+      expect(effectHook?.deps).toEqual([1]);
+    });
+  });
 });
