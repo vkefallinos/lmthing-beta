@@ -739,4 +739,466 @@ describe('Base class', () => {
       expect(effectHook?.deps).toEqual([1]);
     });
   });
+
+  describe('input/output system', () => {
+    describe('defInput', () => {
+      it('should access input value set with setInput', () => {
+        let inputValue: any;
+
+        const base = new Base();
+        base.setFn(({ defInput }) => {
+          inputValue = defInput();
+        });
+
+        expect(inputValue).toBeUndefined();
+
+        base.setInput('test-input');
+        expect(inputValue).toBe('test-input');
+      });
+
+      it('should update input value on multiple setInput calls', () => {
+        let inputValue: any;
+
+        const base = new Base();
+        base.setFn(({ defInput }) => {
+          inputValue = defInput();
+        });
+
+        base.setInput('first');
+        expect(inputValue).toBe('first');
+
+        base.setInput('second');
+        expect(inputValue).toBe('second');
+
+        base.setInput({ complex: 'object' });
+        expect(inputValue).toEqual({ complex: 'object' });
+      });
+    });
+
+    describe('defOutputObject', () => {
+      it('should create output object with namespace and key', () => {
+        let outputItem: any;
+
+        const base = new Base();
+        base.setFn(({ defOutputObject }) => {
+          outputItem = defOutputObject('ns1', 'key1', 'value1');
+        });
+
+        expect(outputItem.key).toBe('key1');
+        expect(outputItem.value).toBe('value1');
+        expect(outputItem.enabled).toBe(true);
+        expect(typeof outputItem.enable).toBe('function');
+        expect(typeof outputItem.disable).toBe('function');
+      });
+
+      it('should support enable and disable functions', () => {
+        let outputItem: any;
+
+        const base = new Base();
+        base.setFn(({ defOutputObject }) => {
+          outputItem = defOutputObject('ns1', 'key1', 'value1');
+        });
+
+        expect(outputItem.enabled).toBe(true);
+
+        outputItem.disable();
+        expect(outputItem.enabled).toBe(false);
+
+        outputItem.enable();
+        expect(outputItem.enabled).toBe(true);
+      });
+
+      it('should update values on re-run', () => {
+        let outputItem: any;
+
+        const base = new Base();
+        base.setFn(({ defState, defOutputObject }) => {
+          const [count, setCount] = defState(0);
+          outputItem = defOutputObject('ns1', 'counter', count);
+
+          if (count < 2) {
+            setCount(count + 1);
+          }
+        });
+
+        expect(outputItem.value).toBe(2);
+      });
+    });
+
+    describe('defOutputArray', () => {
+      it('should create output array item with namespace and key', () => {
+        let outputItem: any;
+
+        const base = new Base();
+        base.setFn(({ defOutputArray }) => {
+          outputItem = defOutputArray('ns1', 'items', 'item1');
+        });
+
+        expect(outputItem.key).toBe('items');
+        expect(outputItem.value).toBe('item1');
+        expect(outputItem.enabled).toBe(true);
+      });
+
+      it('should support enable and disable functions', () => {
+        let outputItem: any;
+
+        const base = new Base();
+        base.setFn(({ defOutputArray }) => {
+          outputItem = defOutputArray('ns1', 'items', 'item1');
+        });
+
+        expect(outputItem.enabled).toBe(true);
+
+        outputItem.disable();
+        expect(outputItem.enabled).toBe(false);
+
+        outputItem.enable();
+        expect(outputItem.enabled).toBe(true);
+      });
+    });
+
+    describe('onOutput callback', () => {
+      it('should call onOutput callback after stabilization', () => {
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defOutputObject }) => {
+          defOutputObject('ns1', 'key1', 'value1');
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: { key1: 'value1' },
+        });
+      });
+
+      it('should build output with multiple namespaces', () => {
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defOutputObject }) => {
+          defOutputObject('ns1', 'key1', 'value1');
+          defOutputObject('ns2', 'key2', 'value2');
+          defOutputObject('ns1', 'key3', 'value3');
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: { key1: 'value1', key3: 'value3' },
+          ns2: { key2: 'value2' },
+        });
+      });
+
+      it('should build output with array values', () => {
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defOutputArray }) => {
+          defOutputArray('ns1', 'items', 'item1');
+          defOutputArray('ns1', 'items', 'item2');
+          defOutputArray('ns1', 'items', 'item3');
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: { items: ['item1', 'item2', 'item3'] },
+        });
+      });
+
+      it('should exclude disabled outputs', () => {
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defOutputObject }) => {
+          defOutputObject('ns1', 'key1', 'value1');
+          const item2 = defOutputObject('ns1', 'key2', 'value2');
+          item2.disable();
+          defOutputObject('ns1', 'key3', 'value3');
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: { key1: 'value1', key3: 'value3' },
+        });
+      });
+
+      it('should mix object and array outputs in same namespace', () => {
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defOutputObject, defOutputArray }) => {
+          defOutputObject('ns1', 'name', 'test');
+          defOutputArray('ns1', 'tags', 'tag1');
+          defOutputArray('ns1', 'tags', 'tag2');
+          defOutputObject('ns1', 'count', 5);
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: {
+            name: 'test',
+            tags: ['tag1', 'tag2'],
+            count: 5,
+          },
+        });
+      });
+    });
+
+    describe('setInput clearing outputs', () => {
+      it('should clear output hooks when setInput is called', () => {
+        let capturedOutput: any;
+        const outputs: any[] = [];
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+          outputs.push(output);
+        });
+
+        base.setFn(({ defInput, defOutputObject }) => {
+          const input = defInput<string>();
+          defOutputObject('ns1', 'input', input);
+        });
+
+        expect(capturedOutput).toEqual({
+          ns1: { input: undefined },
+        });
+
+        base.setInput('first');
+        expect(capturedOutput).toEqual({
+          ns1: { input: 'first' },
+        });
+
+        base.setInput('second');
+        expect(capturedOutput).toEqual({
+          ns1: { input: 'second' },
+        });
+
+        // Should have 3 outputs (initial, first, second)
+        expect(outputs.length).toBe(3);
+      });
+
+      it('should maintain non-output hooks when clearing outputs', () => {
+        let stateValue: number | undefined;
+        let capturedOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          capturedOutput = output;
+        });
+
+        base.setFn(({ defState, defInput, defOutputObject }) => {
+          const [count, setCount] = defState(0);
+          const input = defInput<string>();
+
+          stateValue = count;
+          defOutputObject('ns1', 'count', count);
+          defOutputObject('ns1', 'input', input);
+
+          // Increment count once on first input
+          if (input === 'first' && count === 0) {
+            setCount(1);
+          }
+        });
+
+        base.setInput('first');
+        expect(stateValue).toBe(1);
+        expect(capturedOutput).toEqual({
+          ns1: { count: 1, input: 'first' },
+        });
+
+        // State should persist across setInput
+        base.setInput('second');
+        expect(stateValue).toBe(1); // State persists
+        expect(capturedOutput).toEqual({
+          ns1: { count: 1, input: 'second' },
+        });
+      });
+    });
+
+    describe('integration tests', () => {
+      it('should combine input, state, and output in real scenario', () => {
+        const outputs: any[] = [];
+
+        const base = new Base();
+        base.onOutput((output) => {
+          outputs.push(output);
+        });
+
+        base.setFn(({ defInput, defState, defOutputObject, defOutputArray }) => {
+          const input = defInput<{ items: string[] }>();
+          const [processedCount, setProcessedCount] = defState(0);
+
+          if (input && input.items) {
+            input.items.forEach((item) => {
+              defOutputArray('results', 'processed', item.toUpperCase());
+            });
+
+            if (processedCount === 0) {
+              setProcessedCount(input.items.length);
+            }
+          }
+
+          defOutputObject('results', 'count', processedCount);
+        });
+
+        base.setInput({ items: ['apple', 'banana', 'cherry'] });
+
+        expect(outputs[outputs.length - 1]).toEqual({
+          results: {
+            processed: ['APPLE', 'BANANA', 'CHERRY'],
+            count: 3,
+          },
+        });
+      });
+
+      it('should handle complex processing pipeline', () => {
+        let finalOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          finalOutput = output;
+        });
+
+        base.setFn(({ defInput, defState, defOutputObject, defOutputArray }) => {
+          const input = defInput<number>();
+          const [multiplier, setMultiplier] = defState(1);
+
+          if (input !== undefined) {
+            const result = input * multiplier;
+
+            defOutputObject('calculation', 'input', input);
+            defOutputObject('calculation', 'multiplier', multiplier);
+            defOutputObject('calculation', 'result', result);
+
+            // Build a sequence
+            for (let i = 1; i <= input; i++) {
+              defOutputArray('sequence', 'values', i * multiplier);
+            }
+
+            // Update multiplier once
+            if (multiplier === 1) {
+              setMultiplier(2);
+            }
+          }
+        });
+
+        base.setInput(3);
+
+        expect(finalOutput).toEqual({
+          calculation: {
+            input: 3,
+            multiplier: 2,
+            result: 6,
+          },
+          sequence: {
+            values: [2, 4, 6],
+          },
+        });
+      });
+
+      it('should support conditional output generation', () => {
+        let finalOutput: any;
+
+        const base = new Base();
+        base.onOutput((output) => {
+          finalOutput = output;
+        });
+
+        base.setFn(({ defInput, defOutputObject }) => {
+          const input = defInput<{ type: string; value: any }>();
+
+          if (input) {
+            if (input.type === 'success') {
+              defOutputObject('result', 'status', 'success');
+              defOutputObject('result', 'data', input.value);
+            } else if (input.type === 'error') {
+              defOutputObject('result', 'status', 'error');
+              defOutputObject('result', 'message', input.value);
+            }
+          }
+        });
+
+        base.setInput({ type: 'success', value: { id: 1, name: 'Test' } });
+        expect(finalOutput).toEqual({
+          result: {
+            status: 'success',
+            data: { id: 1, name: 'Test' },
+          },
+        });
+
+        base.setInput({ type: 'error', value: 'Something went wrong' });
+        expect(finalOutput).toEqual({
+          result: {
+            status: 'error',
+            message: 'Something went wrong',
+          },
+        });
+      });
+    });
+
+    describe('snapshots with input/output hooks', () => {
+      it('should capture input hooks in snapshots', () => {
+        const base = new Base();
+        base.setFn(({ defInput, defOutputObject }) => {
+          const input = defInput<string>();
+          defOutputObject('ns1', 'data', input);
+        });
+
+        base.setInput('test');
+
+        const snapshots = base.getSnapshots();
+        const lastSnapshot = snapshots[snapshots.length - 1];
+
+        const inputHook = lastSnapshot.hooks.find(h => h.type === 'input');
+        expect(inputHook).toBeDefined();
+        expect(inputHook?.value).toBe('test');
+      });
+
+      it('should capture output hooks in snapshots', () => {
+        const base = new Base();
+        base.setFn(({ defOutputObject, defOutputArray }) => {
+          defOutputObject('ns1', 'key1', 'value1');
+          defOutputArray('ns1', 'items', 'item1');
+        });
+
+        const snapshots = base.getSnapshots();
+        const lastSnapshot = snapshots[snapshots.length - 1];
+
+        const outputObjectHook = lastSnapshot.hooks.find(
+          h => h.type === 'outputObject'
+        );
+        const outputArrayHook = lastSnapshot.hooks.find(
+          h => h.type === 'outputArray'
+        );
+
+        expect(outputObjectHook).toBeDefined();
+        expect(outputObjectHook?.namespace).toBe('ns1');
+        expect(outputObjectHook?.key).toBe('key1');
+        expect(outputObjectHook?.value).toBe('value1');
+        expect(outputObjectHook?.enabled).toBe(true);
+
+        expect(outputArrayHook).toBeDefined();
+        expect(outputArrayHook?.namespace).toBe('ns1');
+        expect(outputArrayHook?.key).toBe('items');
+        expect(outputArrayHook?.value).toBe('item1');
+        expect(outputArrayHook?.enabled).toBe(true);
+      });
+    });
+  });
 });
