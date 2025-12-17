@@ -653,6 +653,10 @@ When Claude makes architecture decisions:
 
 ## Version History
 
+### v1.5.0 - Prompt defTool (2025-12-17)
+- Added `defTool(name, description, schema, execute)` to Prompt API
+- Tools are emitted to the `tools` namespace as output objects with enable/disable support
+
 ### v1.4.0 - Extension System (2025-12-17)
 - Added `extend()` method to create custom `def*` methods using existing hooks
 - Implemented extension system with `init` (optional) and `execute` (required) functions

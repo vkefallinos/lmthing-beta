@@ -8,6 +8,12 @@ export type PromptAPI = {
   defVariable: (name: string, value: any) => ReturnType<BaseAPI['defOutputObject']>;
   defMessage: (role: 'user' | 'assistant', message: string) => ReturnType<BaseAPI['defOutputArray']>;
   defSystem: (name: string, value: any) => ReturnType<BaseAPI['defOutputObject']>;
+  defTool: (
+    name: string,
+    description: string,
+    schema: Record<string, any>,
+    execute: (...args: any[]) => any
+  ) => ReturnType<BaseAPI['defOutputObject']>;
 };
 
 export class Prompt extends Base {
@@ -31,6 +37,21 @@ export class Prompt extends Base {
           return defOutputObject('systems', name, value);
         },
       },
+      defTool: {
+        execute: (
+          { defOutputObject },
+          name: string,
+          description: string,
+          schema: Record<string, any>,
+          executeFn: (...args: any[]) => any
+        ) => {
+          return defOutputObject('tools', name, {
+            description,
+            schema,
+            execute: executeFn,
+          });
+        },
+      },
     });
   }
 
@@ -45,6 +66,7 @@ export class Prompt extends Base {
         defVariable: fullApi.defVariable,
         defMessage: fullApi.defMessage,
         defSystem: fullApi.defSystem,
+        defTool: fullApi.defTool,
       };
       renderFn(filteredApi as any);
     });
