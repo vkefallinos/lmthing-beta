@@ -3,6 +3,36 @@ type Reducer<S, A> = (state: S, action: A) => S;
 type EffectCallback = () => void | (() => void);
 type DependencyList = ReadonlyArray<any>;
 
+// Extension types
+export type BaseAPI = {
+  defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
+  defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
+  defRef: <T>(initialValue: T) => { current: T };
+  defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
+  defInput: <T>() => T;
+  defOutputObject: (namespace: string, key: string, value: any) => {
+    key: string;
+    value: any;
+    enable: () => void;
+    disable: () => void;
+    enabled: boolean;
+  };
+  defOutputArray: (namespace: string, key: string, value: any) => {
+    key: string;
+    value: any;
+    enable: () => void;
+    disable: () => void;
+    enabled: boolean;
+  };
+};
+
+export interface ExtensionDefinition {
+  init?: (base: Base) => void;
+  execute: (api: BaseAPI, ...args: any[]) => any;
+}
+
+export type ExtensionsConfig = Record<string, ExtensionDefinition>;
+
 interface StateHook<T> {
   type: 'state';
   value: T;
@@ -77,53 +107,21 @@ export class Base {
   private snapshots: FunctionSnapshot[] = [];
   private inputValue: any = undefined;
   private outputCallback?: (output: Record<string, Record<string, any>>) => void;
-  private renderFn?: (api: {
-    defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
-    defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
-    defRef: <T>(initialValue: T) => { current: T };
-    defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
-    defInput: <T>() => T;
-    defOutputObject: (namespace: string, key: string, value: any) => {
-      key: string;
-      value: any;
-      enable: () => void;
-      disable: () => void;
-      enabled: boolean;
-    };
-    defOutputArray: (namespace: string, key: string, value: any) => {
-      key: string;
-      value: any;
-      enable: () => void;
-      disable: () => void;
-      enabled: boolean;
-    };
-  }) => void;
+  private extensions: Map<string, ExtensionDefinition> = new Map();
+  private initializedExtensions: Set<string> = new Set();
+  private renderFn?: (api: BaseAPI & Record<string, any>) => void;
 
   constructor() {
     // Constructor is now empty - use setFn to set the render function
   }
 
-  public setFn(renderFn: (api: {
-    defState: <T>(initialValue: T) => [T, (action: SetStateAction<T>) => void];
-    defEffect: (callback: EffectCallback, deps?: DependencyList) => void;
-    defRef: <T>(initialValue: T) => { current: T };
-    defReducer: <S, A>(reducer: Reducer<S, A>, initialState: S) => [S, (action: A) => void];
-    defInput: <T>() => T;
-    defOutputObject: (namespace: string, key: string, value: any) => {
-      key: string;
-      value: any;
-      enable: () => void;
-      disable: () => void;
-      enabled: boolean;
-    };
-    defOutputArray: (namespace: string, key: string, value: any) => {
-      key: string;
-      value: any;
-      enable: () => void;
-      disable: () => void;
-      enabled: boolean;
-    };
-  }) => void): void {
+  public extend(extensions: ExtensionsConfig): void {
+    Object.entries(extensions).forEach(([name, definition]) => {
+      this.extensions.set(name, definition);
+    });
+  }
+
+  public setFn(renderFn: (api: BaseAPI & Record<string, any>) => void): void {
     this.renderFn = renderFn;
     this.run();
   }
@@ -143,8 +141,8 @@ export class Base {
       this.isRunning = true;
       this.pendingUpdates = [];
 
-      // Run the user function
-      this.renderFn({
+      // Build base API
+      const baseAPI: BaseAPI = {
         defState: this.defState.bind(this),
         defEffect: this.defEffect.bind(this),
         defRef: this.defRef.bind(this),
@@ -152,7 +150,24 @@ export class Base {
         defInput: this.defInput.bind(this),
         defOutputObject: this.defOutputObject.bind(this),
         defOutputArray: this.defOutputArray.bind(this),
+      };
+
+      // Add extended methods to API
+      const extendedAPI: any = { ...baseAPI };
+      this.extensions.forEach((definition, name) => {
+        extendedAPI[name] = (...args: any[]) => {
+          // Run init once on first usage
+          if (!this.initializedExtensions.has(name) && definition.init) {
+            definition.init(this);
+            this.initializedExtensions.add(name);
+          }
+          // Execute the extension with the extended API (includes other extensions) and arguments
+          return definition.execute(extendedAPI, ...args);
+        };
       });
+
+      // Run the user function
+      this.renderFn(extendedAPI);
 
       this.isRunning = false;
 

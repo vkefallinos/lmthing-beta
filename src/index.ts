@@ -1,1 +1,1 @@
-export { Base, type FunctionSnapshot } from './Base';
+export { Base, type FunctionSnapshot, type BaseAPI, type ExtensionDefinition, type ExtensionsConfig } from './Base';

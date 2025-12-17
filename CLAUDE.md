@@ -21,6 +21,7 @@ A TypeScript class that implements a hook-based state management system with the
 4. **Reducer Pattern** (`defReducer`) - Like React's `useReducer`
 5. **Input Processing** (`defInput`) - Access input data within the hook system
 6. **Structured Output** (`defOutputObject`, `defOutputArray`) - Generate organized output with namespace support
+7. **Extension System** (`extend`) - Create custom `def*` methods using existing hooks for composable, reusable patterns
 
 ### Key Concept: Stabilization Loop
 
@@ -348,6 +349,85 @@ base.setInput(['apple', 'banana', 'cherry']);
 4. **Getter for `enabled`**: Returns reactive property that reflects current hook state
 5. **Callback after stabilization**: Ensures output represents final, stable state
 
+### 11. Extension System (extend method)
+**Decision**: Implement an `extend` method that allows users to create custom `def*` methods using existing hooks
+**Rationale**:
+- Enables composability and reusability of hook patterns
+- Allows users to create domain-specific abstractions without modifying the Base class
+- Extended methods have full access to all base hooks and other extensions
+- Init function runs once on first usage for setup/initialization logic
+- Maintains the same hook-based philosophy throughout custom methods
+
+**Implementation**:
+```typescript
+interface ExtensionDefinition {
+  init?: (base: Base) => void;  // Optional: runs once on first usage
+  execute: (api: BaseAPI, ...args: any[]) => any;  // Required: runs on each call
+}
+
+private extensions: Map<string, ExtensionDefinition> = new Map();
+private initializedExtensions: Set<string> = new Set();
+
+public extend(extensions: ExtensionsConfig): void {
+  Object.entries(extensions).forEach(([name, definition]) => {
+    this.extensions.set(name, definition);
+  });
+}
+
+// In run():
+const extendedAPI: any = { ...baseAPI };
+this.extensions.forEach((definition, name) => {
+  extendedAPI[name] = (...args: any[]) => {
+    // Run init once on first usage
+    if (!this.initializedExtensions.has(name) && definition.init) {
+      definition.init(this);
+      this.initializedExtensions.add(name);
+    }
+    // Execute with full API access (includes other extensions)
+    return definition.execute(extendedAPI, ...args);
+  };
+});
+```
+
+**API**:
+```typescript
+const base = new Base();
+
+// Extend with custom method
+base.extend({
+  defVariable: {
+    init: (base) => {
+      // Optional initialization (runs once on first usage)
+      console.log('Variable system initialized');
+    },
+    execute: ({ defOutputObject }, name, value) => {
+      // Use existing hooks to implement custom behavior
+      return defOutputObject('variables', name, value);
+    },
+  },
+});
+
+// Use the extended method
+base.setFn(({ defVariable }) => {
+  defVariable('x', 10);
+  defVariable('y', 20);
+});
+```
+
+**Use Cases**:
+- Creating domain-specific abstractions (e.g., `defVariable`, `defConfig`)
+- Building reusable hook patterns
+- Composing multiple hooks into single operations
+- Implementing custom output patterns
+- Creating library extensions
+
+**Key Design Choices**:
+1. **Init on first usage**: Lazy initialization only when the extension is actually used
+2. **Full API access**: Extended methods can use all base hooks and other extensions
+3. **Same API pattern**: Extended methods appear alongside base methods in the function signature
+4. **Composability**: Extensions can call other extensions, enabling layered abstractions
+5. **Type exports**: `BaseAPI`, `ExtensionDefinition`, and `ExtensionsConfig` are exported for TypeScript users
+
 ---
 
 ## File Structure
@@ -573,6 +653,16 @@ When Claude makes architecture decisions:
 
 ## Version History
 
+### v1.4.0 - Extension System (2025-12-17)
+- Added `extend()` method to create custom `def*` methods using existing hooks
+- Implemented extension system with `init` (optional) and `execute` (required) functions
+- Init functions run once on first usage for lazy initialization
+- Extended methods have full access to base API and other extensions
+- Exported `BaseAPI`, `ExtensionDefinition`, and `ExtensionsConfig` types
+- Added 14 comprehensive tests for extension system (total: 68 tests)
+- Added Architecture Decision #11 documenting the extension system
+- Enables composable, reusable hook patterns and domain-specific abstractions
+
 ### v1.3.0 - Input/Output System (2025-12-17)
 - Added input/output system with `defInput`, `defOutputObject`, and `defOutputArray` hooks
 - Implemented `setInput()` method to provide input data and trigger processing
@@ -613,7 +703,7 @@ When Claude makes architecture decisions:
 ## Contact & Contribution
 
 ### Development Branch
-All development occurs on: `claude/add-function-snapshots-RTjDG`
+All development occurs on: `claude/add-extend-method-sywrt`
 
 ### Before Contributing
 1. Read this entire document
@@ -625,5 +715,5 @@ All development occurs on: `claude/add-function-snapshots-RTjDG`
 ---
 
 **Last Updated**: 2025-12-17
-**Last Updated By**: Claude (input/output system)
+**Last Updated By**: Claude (extension system)
 **Next Review**: After next major feature addition
