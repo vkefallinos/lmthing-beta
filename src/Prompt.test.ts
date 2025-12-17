@@ -112,6 +112,53 @@ describe('Prompt class', () => {
     });
   });
 
+  describe('defTool', () => {
+    it('should output tools to the tools namespace', () => {
+      const prompt = new Prompt();
+      let output: any = {};
+
+      prompt.onOutput((result) => {
+        output = result;
+      });
+
+      prompt.setFn(({ defTool }) => {
+        defTool('search', 'Search for data', { type: 'object' }, 'searchFn');
+        defTool('weather', 'Get weather', { city: 'string' }, 'weatherFn');
+      });
+
+      expect(output.tools).toEqual({
+        search: {
+          description: 'Search for data',
+          schema: { type: 'object' },
+          execute: 'searchFn',
+        },
+        weather: {
+          description: 'Get weather',
+          schema: { city: 'string' },
+          execute: 'weatherFn',
+        },
+      });
+    });
+
+    it('should support enable and disable for tools', () => {
+      const prompt = new Prompt();
+      let output: any = {};
+
+      prompt.onOutput((result) => {
+        output = result;
+      });
+
+      prompt.setFn(({ defTool }) => {
+        defTool('activeTool', 'Active tool', {}, () => {});
+        const disabled = defTool('disabledTool', 'Disabled tool', {}, () => {});
+        disabled.disable();
+      });
+
+      expect(output.tools.activeTool).toBeDefined();
+      expect(output.tools.disabledTool).toBeUndefined();
+    });
+  });
+
   describe('combined usage', () => {
     it('should support all three methods together', () => {
       const prompt = new Prompt();
@@ -197,6 +244,7 @@ describe('Prompt class', () => {
         expect(typeof api.defVariable).toBe('function');
         expect(typeof api.defMessage).toBe('function');
         expect(typeof api.defSystem).toBe('function');
+        expect(typeof (api as any).defTool).toBe('function');
 
         // These should NOT be available
         expect((api as any).defInput).toBeUndefined();
