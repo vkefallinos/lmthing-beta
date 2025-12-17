@@ -116,26 +116,28 @@ describe('Prompt class', () => {
     it('should output tools to the tools namespace', () => {
       const prompt = new Prompt();
       let output: any = {};
+      const searchFn = () => {};
+      const weatherFn = () => {};
 
       prompt.onOutput((result) => {
         output = result;
       });
 
       prompt.setFn(({ defTool }) => {
-        defTool('search', 'Search for data', { type: 'object' }, 'searchFn');
-        defTool('weather', 'Get weather', { city: 'string' }, 'weatherFn');
+        defTool('search', 'Search for data', { type: 'object' }, searchFn);
+        defTool('weather', 'Get weather', { city: 'string' }, weatherFn);
       });
 
       expect(output.tools).toEqual({
         search: {
           description: 'Search for data',
           schema: { type: 'object' },
-          execute: 'searchFn',
+          execute: searchFn,
         },
         weather: {
           description: 'Get weather',
           schema: { city: 'string' },
-          execute: 'weatherFn',
+          execute: weatherFn,
         },
       });
     });
@@ -143,14 +145,16 @@ describe('Prompt class', () => {
     it('should support enable and disable for tools', () => {
       const prompt = new Prompt();
       let output: any = {};
+      const activeHandler = () => {};
+      const disabledHandler = () => {};
 
       prompt.onOutput((result) => {
         output = result;
       });
 
       prompt.setFn(({ defTool }) => {
-        defTool('activeTool', 'Active tool', {}, () => {});
-        const disabled = defTool('disabledTool', 'Disabled tool', {}, () => {});
+        defTool('activeTool', 'Active tool', {}, activeHandler);
+        const disabled = defTool('disabledTool', 'Disabled tool', {}, disabledHandler);
         disabled.disable();
       });
 

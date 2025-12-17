@@ -11,8 +11,8 @@ export type PromptAPI = {
   defTool: (
     name: string,
     description: string,
-    schema: any,
-    execute: any
+    schema: Record<string, any>,
+    execute: (...args: any[]) => any
   ) => ReturnType<BaseAPI['defOutputObject']>;
 };
 
@@ -38,7 +38,13 @@ export class Prompt extends Base {
         },
       },
       defTool: {
-        execute: ({ defOutputObject }, name: string, description: string, schema: any, executeFn: any) => {
+        execute: (
+          { defOutputObject },
+          name: string,
+          description: string,
+          schema: Record<string, any>,
+          executeFn: (...args: any[]) => any
+        ) => {
           return defOutputObject('tools', name, {
             description,
             schema,
