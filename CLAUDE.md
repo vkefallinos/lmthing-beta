@@ -5,7 +5,7 @@
 **Project Name**: lmthing-beta
 **Purpose**: A TypeScript implementation of React-like hooks in a standalone class-based environment
 
-This project provides a `Base` class that mimics React's hook system (`useState`, `useEffect`, `useRef`, `useReducer`) but operates independently of React. The class accepts a function that is re-run automatically until the state stabilizes.
+This project provides a `Base` class that mimics React's hook system (`useState`, `useEffect`, `useRef`, `useReducer`) but operates independently of React. The class accepts a function via the `setFn()` method that is re-run automatically until the state stabilizes.
 
 ---
 
@@ -23,7 +23,7 @@ A TypeScript class that implements a hook-based state management system with the
 ### Key Concept: Stabilization Loop
 
 Unlike React which re-renders based on state changes, our `Base` class:
-- Runs the provided function immediately upon instantiation
+- Runs the provided function immediately when `setFn()` is called
 - Re-runs the function automatically when state changes occur
 - Continues re-running until no more state changes happen (stabilization)
 - Executes effects only after the state has stabilized
@@ -124,6 +124,46 @@ const depsChanged = !deps || !hook.deps ||
 - Matches React's `useRef` behavior
 - Provides escape hatch for values that shouldn't cause updates
 - Useful for tracking render counts, timers, etc.
+
+### 8. setFn Method Pattern
+**Decision**: Accept the render function via a `setFn()` method instead of the constructor
+**Rationale**:
+- Separates instance creation from execution
+- Allows for deferred initialization when needed
+- More flexible API that enables conditional setup
+- Clearer control flow - instance exists before execution begins
+- Enables potential future features like re-setting the function
+
+**Implementation**:
+```typescript
+export class Base {
+  private renderFn?: (api: {...}) => void;
+
+  constructor() {
+    // Empty constructor - use setFn to initialize
+  }
+
+  public setFn(renderFn: (api: {...}) => void): void {
+    this.renderFn = renderFn;
+    this.run();
+  }
+
+  private run(): void {
+    if (!this.renderFn) {
+      return; // No function set yet
+    }
+    // ... rest of execution logic
+  }
+}
+```
+
+**Usage**:
+```typescript
+const instance = new Base();
+instance.setFn(({ defState, defEffect }) => {
+  // Your code here
+});
+```
 
 ---
 
@@ -350,6 +390,13 @@ When Claude makes architecture decisions:
 
 ## Version History
 
+### v1.1.0 - setFn Method Refactoring (2025-12-17)
+- Refactored Base class to use `setFn()` method instead of constructor parameter
+- Separated instance creation from execution for more flexibility
+- Updated all 24 tests to use new API pattern
+- Updated README.md with new usage examples
+- Added Architecture Decision #8 documenting the setFn pattern
+
 ### v1.0.0 - Initial Implementation (2025-12-17)
 - Created Base class with defState, defEffect, defRef, defReducer
 - Implemented stabilization loop architecture
@@ -373,5 +420,5 @@ All development occurs on: `claude/base-class-react-hooks-yZ3jb`
 ---
 
 **Last Updated**: 2025-12-17
-**Last Updated By**: Claude (Initial creation)
+**Last Updated By**: Claude (setFn refactoring)
 **Next Review**: After next major feature addition
